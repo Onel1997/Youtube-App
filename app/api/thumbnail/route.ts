@@ -3,14 +3,21 @@ import { getOpenAIApiKey } from "@/lib/env";
 import { createThumbnailPromptsWithGpt } from "@/lib/thumbnail-prompt";
 import { generateThumbnailPng } from "@/lib/openai-thumbnail";
 import { slugifyFilename } from "@/lib/filename";
+import { logTimingBreakdown, timeStep, type TimingStep } from "@/lib/performance-log";
 import type { ThumbnailVariation } from "@/types/thumbnail";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const VARIATION_COUNT = 3;
+const TIMING_PREFIX = "[Thumbnail]";
 
 export async function POST(request: NextRequest) {
+  const routeStarted = Date.now();
+  const steps: TimingStep[] = [];
+
+  console.time(`${TIMING_PREFIX} total`);
+
   try {
     const openaiKey = getOpenAIApiKey();
 
@@ -38,30 +45,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("[Thumbnail API] Start", { topic, title, tagCount: tags.length });
+    const promptVariants = await timeStep(
+      `${TIMING_PREFIX} GPT thumbnail prompts`,
+      () =>
+        createThumbnailPromptsWithGpt(openaiKey, {
+          topic,
+          title,
+          script,
+          thumbnailIdea,
+          tags,
+        }),
+      steps
+    );
 
-    const promptVariants = await createThumbnailPromptsWithGpt(openaiKey, {
-      topic,
-      title,
-      script,
-      thumbnailIdea,
-      tags,
-    });
-
-    console.log("[Thumbnail API] GPT prompts ready", {
-      count: promptVariants.length,
-      strategies: promptVariants.map((v) => v.strategy),
-    });
-
-    const imageResults = await Promise.all(
-      promptVariants.map(async (variant) => {
-        const image = await generateThumbnailPng(
-          openaiKey,
-          variant.prompt,
-          variant.label
-        );
-        return { variant, image };
-      })
+    const imageResults = await timeStep(
+      `${TIMING_PREFIX} OpenAI image generation (3 variants)`,
+      () =>
+        Promise.all(
+          promptVariants.map(async (variant) => {
+            const image = await generateThumbnailPng(
+              openaiKey,
+              variant.prompt,
+              variant.label
+            );
+            return { variant, image };
+          })
+        ),
+      steps
     );
 
     const variations: ThumbnailVariation[] = imageResults.map(
@@ -79,23 +89,24 @@ export async function POST(request: NextRequest) {
     );
 
     const thumbnailFilename = slugifyFilename(title, "png");
-
-    console.log("[Thumbnail API] Done", {
-      variations: variations.length,
-      imageUrls: variations.map((v) => ({
-        id: v.id,
-        hasDataUrl: !!v.dataUrl,
-        hasOpenAiUrl: !!v.openAiSourceUrl,
-      })),
-    });
+    const totalMs = Date.now() - routeStarted;
+    const summary = logTimingBreakdown("api/thumbnail", steps, totalMs);
+    console.timeEnd(`${TIMING_PREFIX} total`);
 
     return NextResponse.json({
       success: true,
       variations,
       thumbnailFilename,
       count: VARIATION_COUNT,
+      timingMs: {
+        total: totalMs,
+        slowest: summary.slowest.name,
+        slowestMs: summary.slowest.ms,
+        steps: summary.steps.map((s) => ({ name: s.name, ms: s.ms })),
+      },
     });
   } catch (error) {
+    console.timeEnd(`${TIMING_PREFIX} total`);
     console.error("[Thumbnail API] Error:", error);
     const message =
       error instanceof Error ? error.message : "Thumbnail-Generierung fehlgeschlagen.";

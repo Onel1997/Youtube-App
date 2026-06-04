@@ -7,6 +7,7 @@ import {
 } from "@/lib/env";
 import { generateSpeechMp3 } from "@/lib/elevenlabs";
 import { slugifyFilename } from "@/lib/filename";
+import { logTimingBreakdown, timeStep, type TimingStep } from "@/lib/performance-log";
 import { createVideoJobDir } from "@/lib/video-jobs";
 import { buildVideoFromAssets } from "@/lib/video-builder";
 import type { GeneratedContent } from "@/types";
@@ -15,6 +16,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MODEL = "claude-sonnet-4-6";
+const TIMING_PREFIX = "[Generate]";
 
 const SYSTEM_PROMPT = `Du bist ein erfahrener YouTube-Scriptwriter für einen deutschen Gaming & Entertainment Kanal.
 Dein Stil ist locker, unterhaltsam und jugendlich – wie ein cooler Gaming-YouTuber der mit seinen Zuschauern auf Augenhöhe spricht.
@@ -31,6 +33,11 @@ Das JSON muss exakt dieses Format haben:
 }`;
 
 export async function POST(request: NextRequest) {
+  const routeStarted = Date.now();
+  const steps: TimingStep[] = [];
+
+  console.time(`${TIMING_PREFIX} total`);
+
   try {
     const apiKey = getAnthropicApiKey();
     const elevenLabsKey = getElevenLabsApiKey();
@@ -69,21 +76,23 @@ export async function POST(request: NextRequest) {
 
     const anthropic = new Anthropic({ apiKey });
 
-    const message = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: `Erstelle ein komplettes YouTube-Video-Paket für folgendes Thema: "${topic}"
+    const message = await timeStep(`${TIMING_PREFIX} Claude script generation`, async () => {
+      return anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 4096,
+        system: SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: `Erstelle ein komplettes YouTube-Video-Paket für folgendes Thema: "${topic}"
 
 Das Skript soll auf Deutsch sein, ca. 2-3 Minuten Sprechzeit (ca. 300-450 Wörter).
 Der Hook muss in den ersten 3 Sekunden fesseln.
 Der Ton soll locker, unterhaltsam und jugendlich sein – perfekt für einen Gaming & Entertainment Kanal.`,
-        },
-      ],
-    });
+          },
+        ],
+      });
+    }, steps);
 
     const textBlock = message.content.find((block) => block.type === "text");
     if (!textBlock || textBlock.type !== "text") {
@@ -120,11 +129,21 @@ Der Ton soll locker, unterhaltsam und jugendlich sein – perfekt für einen Gam
       );
     }
 
-    const audioBuffer = await generateSpeechMp3(elevenLabsKey, parsed.script);
+    const audioBuffer = await timeStep(
+      `${TIMING_PREFIX} ElevenLabs audio generation`,
+      () => generateSpeechMp3(elevenLabsKey, parsed.script),
+      steps
+    );
+
     const audioBase64 = audioBuffer.toString("base64");
     const audioFilename = slugifyFilename(parsed.title, "mp3");
 
-    const { jobId, dir: workDir } = await createVideoJobDir();
+    const { jobId, dir: workDir } = await timeStep(
+      `${TIMING_PREFIX} Create video job dir`,
+      () => createVideoJobDir(),
+      steps
+    );
+
     await buildVideoFromAssets({
       workDir,
       topic,
@@ -132,9 +151,20 @@ Der Ton soll locker, unterhaltsam und jugendlich sein – perfekt für einen Gam
       script: parsed.script,
       audioBuffer,
       pexelsApiKey: pexelsKey,
+      timingSteps: steps,
     });
 
     const videoFilename = slugifyFilename(parsed.title, "mp4");
+    const totalMs = Date.now() - routeStarted;
+    const summary = logTimingBreakdown("api/generate", steps, totalMs);
+
+    console.timeEnd(`${TIMING_PREFIX} total`);
+    console.log(
+      `${TIMING_PREFIX} Note: Thumbnail, Upload Kit, and Clip Generator run in separate client requests — not included in this total.`
+    );
+    console.log(
+      `${TIMING_PREFIX} Vercel maxDuration config: ${maxDuration}s — plan limit may be lower (Hobby: 10s, Pro: 60s default).`
+    );
 
     return NextResponse.json({
       success: true,
@@ -144,8 +174,15 @@ Der Ton soll locker, unterhaltsam und jugendlich sein – perfekt für einen Gam
       videoJobId: jobId,
       videoFilename,
       videoDownloadUrl: `/api/video/${jobId}`,
+      timingMs: {
+        total: totalMs,
+        slowest: summary.slowest.name,
+        slowestMs: summary.slowest.ms,
+        steps: summary.steps.map((s) => ({ name: s.name, ms: s.ms })),
+      },
     });
   } catch (error) {
+    console.timeEnd(`${TIMING_PREFIX} total`);
     console.error("Generate error:", error);
     const message =
       error instanceof Error ? error.message : "Ein unbekannter Fehler ist aufgetreten.";
