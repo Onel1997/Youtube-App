@@ -1,8 +1,8 @@
 import OpenAI from "openai";
-import { writeFileSync, readFileSync, unlinkSync, mkdtempSync } from "fs";
+import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import { join } from "path";
-import { tmpdir } from "os";
 import { runFfmpeg } from "@/lib/ffmpeg";
+import { TMP_DIR, ensureTmpDir } from "@/lib/tmp-dir";
 
 export const THUMBNAIL_WIDTH = 1280;
 export const THUMBNAIL_HEIGHT = 720;
@@ -35,12 +35,13 @@ async function fetchRemoteImageAsBase64(url: string): Promise<string> {
 }
 
 async function ensure1280x720(base64Png: string): Promise<string> {
-  const workDir = mkdtempSync(join(tmpdir(), "thumb-"));
+  await ensureTmpDir();
+  const workDir = await mkdtemp(join(TMP_DIR, "thumb-"));
   const inputPath = join(workDir, "input.png");
   const outputPath = join(workDir, "output.png");
 
   try {
-    writeFileSync(inputPath, Buffer.from(base64Png, "base64"));
+    await writeFile(inputPath, Buffer.from(base64Png, "base64"));
 
     await runFfmpeg([
       "-y",
@@ -51,11 +52,10 @@ async function ensure1280x720(base64Png: string): Promise<string> {
       outputPath,
     ]);
 
-    return readFileSync(outputPath).toString("base64");
+    return (await readFile(outputPath)).toString("base64");
   } finally {
     try {
-      unlinkSync(inputPath);
-      unlinkSync(outputPath);
+      await rm(workDir, { recursive: true, force: true });
     } catch {
       // ignore cleanup errors
     }

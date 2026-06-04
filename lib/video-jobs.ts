@@ -1,17 +1,18 @@
-import { existsSync, mkdirSync, rmSync } from "fs";
+import { existsSync, rmSync } from "fs";
+import { mkdir } from "fs/promises";
 import { join } from "path";
 import { randomUUID } from "crypto";
+import { TMP_DIR, ensureTmpDir } from "@/lib/tmp-dir";
 
-const JOBS_ROOT = join(process.cwd(), "tmp", "video-jobs");
+const JOBS_ROOT = join(TMP_DIR, "video-jobs");
 
-export function createVideoJobDir(): { jobId: string; dir: string } {
-  if (!existsSync(JOBS_ROOT)) {
-    mkdirSync(JOBS_ROOT, { recursive: true });
-  }
+export async function createVideoJobDir(): Promise<{ jobId: string; dir: string }> {
+  await ensureTmpDir();
+  await mkdir(JOBS_ROOT, { recursive: true });
 
   const jobId = randomUUID();
   const dir = join(JOBS_ROOT, jobId);
-  mkdirSync(dir, { recursive: true });
+  await mkdir(dir, { recursive: true });
 
   return { jobId, dir };
 }

@@ -1,8 +1,9 @@
-import { writeFileSync } from "fs";
+import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { downloadBrollClips } from "@/lib/pexels";
 import { generateSrtFromScript } from "@/lib/subtitles";
 import { getAudioDurationSeconds, runFfmpeg } from "@/lib/ffmpeg";
+import { ensureTmpDir } from "@/lib/tmp-dir";
 
 const OUTPUT_WIDTH = 1920;
 const OUTPUT_HEIGHT = 1080;
@@ -23,6 +24,9 @@ export async function buildVideoFromAssets(options: {
 }): Promise<string> {
   const { workDir, topic, tags, script, audioBuffer, pexelsApiKey } = options;
 
+  await ensureTmpDir();
+  await mkdir(workDir, { recursive: true });
+
   const audioPath = join(workDir, "audio.mp3");
   const srtPath = join(workDir, "subtitles.srt");
   const normalizedListPath = join(workDir, "normalized.txt");
@@ -30,7 +34,7 @@ export async function buildVideoFromAssets(options: {
   const loopedVideoPath = join(workDir, "looped.mp4");
   const finalPath = join(workDir, "final.mp4");
 
-  writeFileSync(audioPath, audioBuffer);
+  await writeFile(audioPath, audioBuffer);
 
   const clipPaths = await downloadBrollClips(
     pexelsApiKey,
@@ -67,7 +71,7 @@ export async function buildVideoFromAssets(options: {
     ]);
   }
 
-  writeFileSync(
+  await writeFile(
     normalizedListPath,
     normalizedPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n")
   );
@@ -99,7 +103,7 @@ export async function buildVideoFromAssets(options: {
   ]);
 
   const srtContent = generateSrtFromScript(script, audioDuration);
-  writeFileSync(srtPath, srtContent, "utf8");
+  await writeFile(srtPath, srtContent, "utf8");
 
   const escapedSrt = escapeSubtitlesPath(srtPath);
   const subtitleStyle =

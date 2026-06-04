@@ -123,7 +123,7 @@ Der Ton soll locker, unterhaltsam und jugendlich sein – perfekt für einen Gam
     const audioBase64 = audioBuffer.toString("base64");
     const audioFilename = slugifyFilename(parsed.title, "mp3");
 
-    const { jobId, dir: workDir } = createVideoJobDir();
+    const { jobId, dir: workDir } = await createVideoJobDir();
     await buildVideoFromAssets({
       workDir,
       topic,
