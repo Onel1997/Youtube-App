@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gaming-darker text-gray-100 antialiased;
+  }
+
+  ::selection {
+    @apply bg-gaming-purple/40 text-white;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-gaming-darker;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-gaming-purple/40;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gaming-purple/60;
+  }
+}
+
+@layer components {
+  .neon-border {
+    @apply border border-gaming-purple/30;
+    box-shadow: inset 0 0 20px rgba(168, 85, 247, 0.05);
+  }
+
+  .neon-text {
+    text-shadow: 0 0 20px rgba(168, 85, 247, 0.5);
+  }
+
+  .gradient-bg {
+    background: radial-gradient(
+        ellipse at top,
+        rgba(124, 58, 237, 0.15) 0%,
+        transparent 50%
+      ),
+      radial-gradient(
+        ellipse at bottom right,
+        rgba(232, 121, 249, 0.08) 0%,
+        transparent 40%
+      );
+  }
+}
