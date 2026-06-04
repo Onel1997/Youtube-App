@@ -5,6 +5,7 @@ import { generateThumbnailPng } from "@/lib/openai-thumbnail";
 import { slugifyFilename } from "@/lib/filename";
 import type { ThumbnailVariation } from "@/types/thumbnail";
 
+export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const VARIATION_COUNT = 3;

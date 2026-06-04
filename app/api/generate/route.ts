@@ -11,6 +11,7 @@ import { createVideoJobDir } from "@/lib/video-jobs";
 import { buildVideoFromAssets } from "@/lib/video-builder";
 import type { GeneratedContent } from "@/types";
 
+export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MODEL = "claude-sonnet-4-6";
