@@ -1,12 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ["ffmpeg-static", "ffprobe-static"],
+    serverComponentsExternalPackages: ["ffmpeg-static"],
     outputFileTracingIncludes: {
-      "/api/generate": [
-        "./node_modules/ffmpeg-static/ffmpeg",
-        "./node_modules/ffprobe-static/bin/**/*",
-      ],
+      "/api/generate": ["./node_modules/ffmpeg-static/ffmpeg"],
       "/api/thumbnail": ["./node_modules/ffmpeg-static/ffmpeg"],
     },
   },
